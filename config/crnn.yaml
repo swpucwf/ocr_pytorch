@@ -2,7 +2,8 @@ GPUID: 0
 WORKERS: 8
 PRINT_FREQ: 100
 SAVE_FREQ: 5
-PIN_MEMORY: False
+PIN_MEMORY: True
+# 保存位置
 OUTPUT_DIR: 'output'
 
 CUDNN:
@@ -11,17 +12,17 @@ CUDNN:
   ENABLED: True
 
 DATASET:
-  DATASET: 360CC
+  DATASET: leiguan
   ROOT: ""
   # CHAR_FILE: 'lib/dataset/txt/chars_5990.txt'
   CHAR_FILE: 'lib/dataset/txt/plate3.txt'
+  # 数据集位置
   JSON_FILE: {'train': 'datasets/train.txt', 'val': 'datasets/val.txt'}
-#  JSON_FILE: {'train': 'H:/DL-DATASET/360M/train.txt', 'val': 'H:/DL-DATASET/360M/test.txt'}
   SCALE_FACTOR: 0.25
   ROT_FACTOR: 30
   STD: 0.193
   MEAN: 0.588
-  ALPHABETS: ''
+  ALPHABETS: 'QWERTYUIOPASDFGHJKLZXCVBNM0123456789'
 
 TRAIN:
   BATCH_SIZE_PER_GPU: 512
@@ -41,6 +42,7 @@ TRAIN:
   NESTEROV: False
   RMSPROP_ALPHA:
   RMSPROP_CENTERED:
+  # 微调
   FINETUNE:
     IS_FINETUNE: True
     FINETUNE_CHECKPOINIT: 'B_9921.pth'
