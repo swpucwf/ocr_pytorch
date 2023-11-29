@@ -1,38 +1,19 @@
+import torch
 import torch.optim as optim
 import time
 from pathlib import Path
-import torch
-
-def get_optimizer(config, model):
-
-    optimizer = None
-
-    if config.TRAIN.OPTIMIZER == "sgd":
-        optimizer = optim.SGD(
-            filter(lambda p: p.requires_grad, model.parameters()),
-            lr=config.TRAIN.LR,
-            momentum=config.TRAIN.MOMENTUM,
-            weight_decay=config.TRAIN.WD,
-            nesterov=config.TRAIN.NESTEROV
-        )
-    elif config.TRAIN.OPTIMIZER == "adam":
-        optimizer = optim.Adam(
-            filter(lambda p: p.requires_grad, model.parameters()),
-            lr=config.TRAIN.LR,
-        )
-    elif config.TRAIN.OPTIMIZER == "rmsprop":
-        optimizer = optim.RMSprop(
-            filter(lambda p: p.requires_grad, model.parameters()),
-            lr=config.TRAIN.LR,
-            momentum=config.TRAIN.MOMENTUM,
-            weight_decay=config.TRAIN.WD,
-            # alpha=config.TRAIN.RMSPROP_ALPHA,
-            # centered=config.TRAIN.RMSPROP_CENTERED
-        )
-
-    return optimizer
 
 def create_log_folder(cfg, phase='train'):
+    '''
+    1.定义根输出目录root_output_dir，并打印输出。
+    2.设置日志记录器。如果根输出目录不存在，则创建该目录。
+    3.获取数据集名称dataset和模型名称model。
+    4.定义时间字符串time_str，并创建检查点输出目录checkpoints_output_dir。如果目录不存在，则创建该目录。
+    5.打印输出检查点输出目录。
+    6.创建TensorBoard日志目录tensorboard_log_dir。如果目录不存在，则创建该目录。
+    7.打印输出TensorBoard日志目录。
+    8.返回一个字典，包含检查点输出目录和TensorBoard日志目录的字符串表示形式。
+    '''
     # 定义根输出目录
     root_output_dir = Path(cfg.OUTPUT_DIR)
     # 打印输出
@@ -65,17 +46,35 @@ def create_log_folder(cfg, phase='train'):
 
     # 打印输出TensorBoard日志目录
     # print("tensorboard_log_dir:", tensorboard_log_dir)
-
     # 返回一个字典，包含检查点输出目录和TensorBoard日志目录的字符串表示形式
     return {'chs_dir': str(checkpoints_output_dir), 'tb_dir': str(tensorboard_log_dir)}
 
+def get_optimizer(config, model):
+    optimizer = None
+    if config.TRAIN.OPTIMIZER == "sgd":
+        optimizer = optim.SGD(
+            filter(lambda p: p.requires_grad, model.parameters()),
+            lr=config.TRAIN.LR,
+            momentum=config.TRAIN.MOMENTUM,
+            weight_decay=config.TRAIN.WEIGHT_DECAY,
+            nesterov=config.TRAIN.NESTEROV
+        )
+    elif config.TRAIN.OPTIMIZER == "adam":
+        optimizer = optim.Adam(
+            filter(lambda p: p.requires_grad, model.parameters()),
+            lr=config.TRAIN.LR,
+        )
+    elif config.TRAIN.OPTIMIZER == "rmsprop":
+        optimizer = optim.RMSprop(
+            filter(lambda p: p.requires_grad, model.parameters()),
+            lr=config.TRAIN.LR,
+            momentum=config.TRAIN.MOMENTUM,
+            weight_decay=config.TRAIN.WEIGHT_DECAY,
+            # alpha=config.TRAIN.RMSPROP_ALPHA,
+            # centered=config.TRAIN.RMSPROP_CENTERED
+        )
 
-def get_batch_label(d, i):
-    label = []
-    for idx in i:
-        label.append(list(d.labels[idx].values())[0])
-    return label
-
+    return optimizer
 class strLabelConverter(object):
     """Convert between str and label.
 
@@ -160,11 +159,6 @@ class strLabelConverter(object):
                         t[index:index + l], torch.IntTensor([l]), raw=raw))
                 index += l
             return texts
-
-def get_char_dict(path):
-    with open(path, 'rb') as file:
-        char_dict = {num: char.strip().decode('gbk', 'ignore') for num, char in enumerate(file.readlines())}
-
 def model_info(model):  # Plots a line-by-line description of a PyTorch model
     n_p = sum(x.numel() for x in model.parameters())  # number parameters
     n_g = sum(x.numel() for x in model.parameters() if x.requires_grad)  # number gradients
@@ -174,3 +168,9 @@ def model_info(model):  # Plots a line-by-line description of a PyTorch model
         print('%5g %50s %9s %12g %20s %12.3g %12.3g' % (
             i, name, p.requires_grad, p.numel(), list(p.shape), p.mean(), p.std()))
     print('Model Summary: %g layers, %g parameters, %g gradients\n' % (i + 1, n_p, n_g))
+
+def get_batch_label(d, i):
+    label = []
+    for idx in i:
+        label.append(list(d.labels[idx].values())[0])
+    return label

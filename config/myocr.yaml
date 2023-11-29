@@ -6,6 +6,8 @@ PIN_MEMORY: True
 # 保存位置
 OUTPUT_DIR: 'output'
 
+cfg : "[32,32,64,64,'M',128,128,'M',196,196,'M',256,256]"
+
 CUDNN:
   BENCHMARK: True
   DETERMINISTIC: False
@@ -14,8 +16,6 @@ CUDNN:
 DATASET:
   DATASET: leiguan
   ROOT: ""
-  # CHAR_FILE: 'lib/dataset/txt/chars_5990.txt'
-  CHAR_FILE: 'lib/dataset/txt/plate3.txt'
   # 数据集位置
   JSON_FILE: {'train': 'datasets/train.txt', 'val': 'datasets/val.txt'}
   SCALE_FACTOR: 0.25
@@ -25,16 +25,16 @@ DATASET:
   ALPHABETS: 'QWERTYUIOPASDFGHJKLZXCVBNM0123456789'
 
 TRAIN:
-  BATCH_SIZE_PER_GPU: 512
+  BATCH_SIZE_PER_GPU: 6
   SHUFFLE: True
   BEGIN_EPOCH: 0
   END_EPOCH: 200
   RESUME:
-    IS_RESUME: True
-    FILE: 'checkpoint_49_acc_0.9933.pth'
+    IS_RESUME: False
+    FILE: ''
   OPTIMIZER: 'sgd'
   LR: 0.005
-  WD: 0.0
+  WEIGHT_DECAY: 0.0
   LR_STEP: [60, 80]
   # LR_STEP: [40,80,120,180]
   LR_FACTOR: 0.1
@@ -44,8 +44,8 @@ TRAIN:
   RMSPROP_CENTERED:
   # 微调
   FINETUNE:
-    IS_FINETUNE: True
-    FINETUNE_CHECKPOINIT: 'B_9921.pth'
+    IS_FINETUNE: False
+    FINETUNE_CHECKPOINIT: ''
     FREEZE: true
 
 TEST:
@@ -55,7 +55,7 @@ TEST:
   NUM_TEST_DISP: 10
 
 MODEL:
-  NAME: 'crnn'
+  NAME: 'myNet'
   IMAGE_SIZE:
     OW: 280 # origial width: 280
     H: 32
