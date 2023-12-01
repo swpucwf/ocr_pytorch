@@ -1,20 +1,16 @@
 import argparse
 import os
-
 import torch
 import yaml
 from easydict import EasyDict as edict
 from tensorboardX import SummaryWriter
 from torch.backends import cudnn
 from torch.utils.data import DataLoader
-
 import models
-from  alphabets import plateName,plate_chr
+from alphabets import plateName,plate_chr
 from dataset import get_dataset
 from utils import utils, function
 from utils.utils import model_info
-
-
 def parse_arg():
     parser = argparse.ArgumentParser(description="train crnn")
     # 配置文件

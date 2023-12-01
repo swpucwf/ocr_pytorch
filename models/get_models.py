@@ -98,8 +98,9 @@ def weights_init(m):
 # cfg =[32,32,64,64,'M',128,128,'M',196,196,'M',256,256]
 
 class myNet(nn.Module):
-    def __init__(self, cfg=None, num_classes=78, export=False):
+    def __init__(self, cfg=None, num_classes=78, export=False,in_channel=3):
         super(myNet, self).__init__()
+        self.in_channel = in_channel
         if cfg is None:
             cfg = [32, 32, 64, 64, 'M', 128, 128, 'M', 196, 196, 'M', 256, 256]
             # cfg =[32,32,'M',64,64,'M',128,128,'M',256,256]
@@ -114,7 +115,7 @@ class myNet(nn.Module):
 
     def make_layers(self, cfg, batch_norm=False):
         layers = []
-        in_channels = 3
+        in_channels = self.in_channel
         for i in range(len(cfg)):
             if i == 0:
                 conv2d = nn.Conv2d(in_channels, cfg[i], kernel_size=5, stride=1)
@@ -273,44 +274,12 @@ class caffeNetOcr(nn.Module):
             output = F.log_softmax(conv, dim=2)
             return output
 
-class myNetRes50(nn.Module):
-    def __init__(self, num_classes=78, export=False):
-        super(myNetRes50, self).__init__()
-        self.model = models.resnet50(pretrained=True)
-        self.avgPool = nn.AvgPool2d((6, 1), (1, 1))
-        self.conv = nn.Conv2d(512, num_classes, 1, 1)
-        self.export = export
-        # self.conv1 = nn.Conv2d(3,64,7,2,3)
-
-    def forward(self, x):
-        x = self.model.conv1(x)
-        x = self.model.bn1(x)
-        x = self.model.relu(x)
-        x = self.model.maxpool(x)
-        x = self.model.layer1(x)
-        x = self.model.layer2(x)
-        x = self.avgPool(x)
-        x = self.conv(x)
-        if self.export:
-            conv = x.squeeze(2)  # b *512 * width
-            conv = conv.transpose(2, 1)  # [w, b, c]
-            conv = conv.argmax(dim=2)
-            return conv
-        else:
-            b, c, h, w = x.size()
-            assert h == 1, "the height of conv must be 1"
-            conv = x.squeeze(2)  # b *512 * width
-            conv = conv.permute(2, 0, 1)  # [w, b, c]
-            # output = F.log_softmax(self.rnn(conv), dim=2)
-            output = F.log_softmax(conv, dim=2)
-            return output
-
-
 if __name__ == '__main__':
     #  model = CRNN(32, 3, 79,10)
+    # 输入长度为[48, 168]
     cfg = [32, 'M', 64, 'M', 128, 'M', 256]
-    model = myNet(num_classes=78, export=True, cfg=cfg)
-    input =torch.FloatTensor(1, 3, 48, 168)
+    model = myNet(num_classes=78, export=True, cfg=cfg,in_channel=1)
+    input =torch.FloatTensor(1, 1, 48, 168)
     #  torch.save(model.state_dict,"test.pth")
     out = model(input)
     print(out.size())
