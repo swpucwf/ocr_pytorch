@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torch
 from torchvision import models
 
-__all__ = ['CRNN', 'myNet']
+__all__ = ['CRNN', 'resnet_ocr']
 
 
 class BidirectionalLSTM(nn.Module):
@@ -21,69 +21,7 @@ class BidirectionalLSTM(nn.Module):
 
         output = self.embedding(t_rec)  # [T * b, nOut]
         output = output.view(T, b, -1)
-
         return output
-
-
-class CRNN(nn.Module):
-    def __init__(self, imgH, nc, nclass, nh, n_rnn=2, leakyRelu=False):
-        super(CRNN, self).__init__()
-        assert imgH % 16 == 0, 'imgH has to be a multiple of 16'
-
-        ks = [3, 3, 3, 3, 3, 3, 2]
-        ps = [1, 1, 1, 1, 1, 1, 0]
-        ss = [1, 1, 1, 1, 1, 1, 1]
-        nm = [64, 128, 256, 256, 512, 512, 512]
-
-        cnn = nn.Sequential()
-
-        def convRelu(i, batchNormalization=False):
-            nIn = nc if i == 0 else nm[i - 1]
-            nOut = nm[i]
-            cnn.add_module('conv{0}'.format(i),
-                           nn.Conv2d(nIn, nOut, ks[i], ss[i], ps[i]))
-            if batchNormalization:
-                cnn.add_module('batchnorm{0}'.format(i), nn.BatchNorm2d(nOut))
-            if leakyRelu:
-                cnn.add_module('relu{0}'.format(i),
-                               nn.LeakyReLU(0.2, inplace=True))
-            else:
-                cnn.add_module('relu{0}'.format(i), nn.ReLU(True))
-
-        convRelu(0)
-        cnn.add_module('pooling{0}'.format(0), nn.MaxPool2d(2, 2))  # 64x16x64
-        convRelu(1)
-        cnn.add_module('pooling{0}'.format(1), nn.MaxPool2d(2, 2))  # 128x8x32
-        convRelu(2, True)
-        convRelu(3)
-        cnn.add_module('pooling{0}'.format(2),
-                       nn.MaxPool2d((2, 2), (2, 1), (0, 1)))  # 256x4x16
-        convRelu(4, True)
-        convRelu(5)
-        cnn.add_module('pooling{0}'.format(3),
-                       nn.MaxPool2d((2, 2), (2, 1), (0, 1)))  # 512x2x16
-        convRelu(6, True)  # 512x1x16
-
-        self.cnn = cnn
-        self.rnn = nn.Sequential(
-            BidirectionalLSTM(512, nh, nh),
-            BidirectionalLSTM(nh, nh, nclass))
-        self.newCnn = nn.Conv2d(512, nclass, 1, 1)
-
-    def forward(self, input):
-
-        # conv features
-        conv = self.cnn(input)
-        conv = self.newCnn(conv)
-        b, c, h, w = conv.size()
-        assert h == 1, "the height of conv must be 1"
-        conv = conv.squeeze(2)  # b *512 * width
-        conv = conv.permute(2, 0, 1)  # [w, b, c]
-        # output = F.log_softmax(self.rnn(conv), dim=2)
-        output = F.log_softmax(conv, dim=2)
-
-        return output
-
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -97,23 +35,22 @@ def weights_init(m):
 # myCfg = [32,'M',64,'M',128,'M',256]
 # cfg =[32,32,64,64,'M',128,128,'M',196,196,'M',256,256]
 
-class myNet(nn.Module):
+class resnet_ocr(nn.Module):
     def __init__(self, cfg=None, num_classes=78, export=False,in_channel=3):
-        super(myNet, self).__init__()
+        super(resnet_ocr, self).__init__()
         self.in_channel = in_channel
         if cfg is None:
             cfg = [32, 32, 64, 64, 'M', 128, 128, 'M', 196, 196, 'M', 256, 256]
             # cfg =[32,32,'M',64,64,'M',128,128,'M',256,256]
         self.feature = self.make_layers(cfg, True)
         self.export = export
-        # self.classifier = nn.Linear(cfg[-1], num_classes)
-        # self.loc =  nn.MaxPool2d((2, 2), (5, 1), (0, 1),ceil_mode=True)
-        # self.loc =  nn.AvgPool2d((2, 2), (5, 2), (0, 1),ceil_mode=False)
         self.loc = nn.MaxPool2d((5, 2), (1, 1), (0, 1), ceil_mode=False)
         self.newCnn = nn.Conv2d(256, num_classes, 1, 1)
-        # self.newBn=nn.BatchNorm2d(num_classes)
 
-    def make_layers(self, cfg, batch_norm=False):
+        self.ada_pool = nn.AdaptiveAvgPool2d((1,None))
+
+
+    def make_layers(self, cfg, batch_norm=True):
         layers = []
         in_channels = self.in_channel
         for i in range(len(cfg)):
@@ -140,134 +77,17 @@ class myNet(nn.Module):
         x = self.feature(x)
         x = self.loc(x)
         x = self.newCnn(x)
-        # x=self.newBn(x)
         if self.export:  # 推理模式
+            # x = self.ada_pool(x)
             conv = x.squeeze(2)  # b *512 * width
+            # print("conv",conv.shape)
             conv = conv.transpose(2, 1)  # [w, b, c]
             conv = conv.argmax(dim=2)
             return conv
         else:  # 训练模式
             b, c, h, w = x.size()
             assert h == 1, "the height of conv must be 1"
-            conv = x.squeeze(2)  # b *512 * width
-            conv = conv.permute(2, 0, 1)  # [w, b, c]
-            # output = F.log_softmax(self.rnn(conv), dim=2)
-            output = F.log_softmax(conv, dim=2)
-            return output
-
-class myNet1(nn.Module):
-    def __init__(self, cfg=None, num_classes=78, export=False):
-        super(myNet1, self).__init__()
-        if cfg is None:
-            cfg =  [32,32,64,64,'M',128,128,'M',256,256]
-        self.feature = self.make_layers(cfg, True)
-        self.export = export
-        # self.classifier = nn.Linear(cfg[-1], num_classes)
-        # self.loc =  nn.MaxPool2d((2, 2), (5, 1), (0, 1),ceil_mode=True)
-        self.loc = nn.MaxPool2d((5, 2), (1, 1), ceil_mode=False)
-        self.newCnn = nn.Conv2d(256, num_classes, 1, 1)
-
-    def make_layers(self, cfg, batch_norm=False):
-        layers = []
-        in_channels = 3
-        for i in range(len(cfg)):
-            if i == 0:
-                conv2d = nn.Conv2d(in_channels, cfg[i], kernel_size=5, stride=1)
-                if batch_norm:
-                    layers += [conv2d, nn.BatchNorm2d(cfg[i]), nn.ReLU(inplace=True)]
-                else:
-                    layers += [conv2d, nn.ReLU(inplace=True)]
-                in_channels = cfg[i]
-            else:
-                if cfg[i] == 'M':
-                    layers += [nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True)]
-                else:
-                    conv2d = nn.Conv2d(in_channels, cfg[i], kernel_size=3, padding=(0, 1), stride=1)
-                    if batch_norm:
-                        layers += [conv2d, nn.BatchNorm2d(cfg[i]), nn.ReLU(inplace=True)]
-                    else:
-                        layers += [conv2d, nn.ReLU(inplace=True)]
-                    in_channels = cfg[i]
-        return nn.Sequential(*layers)
-
-    def forward(self, x):
-        x = self.feature(x)
-        x = self.loc(x)
-        x = self.newCnn(x)
-        if self.export:
-            conv = x.squeeze(2)  # b *512 * width
-            conv = conv.transpose(2, 1)  # [w, b, c]
-            conv = conv.argmax(dim=2)
-            return conv
-        else:
-            b, c, h, w = x.size()
-            assert h == 1, "the height of conv must be 1"
-            conv = x.squeeze(2)  # b *512 * width
-            conv = conv.permute(2, 0, 1)  # [w, b, c]
-            # output = F.log_softmax(self.rnn(conv), dim=2)
-            output = F.log_softmax(conv, dim=2)
-            return output
-
-
-class caffeNetOcr(nn.Module):
-    def __init__(self, num_classes=2, export=False):
-        super(caffeNetOcr, self).__init__()
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(3, 32, 3, 1, 1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(3, 2, ceil_mode=False),
-        )
-
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(32, 64, 3, 1, 1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d(3, 2, ceil_mode=False),
-        )
-
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(64, 128, 3, 1, 1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d(3, 2, ceil_mode=False),
-        )
-
-        self.conv4 = nn.Sequential(
-            nn.Conv2d(128, 256, 3, 1, 1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2), (2, 1), (0, 1), ceil_mode=False),
-        )
-
-        self.conv5 = nn.Sequential(
-            nn.Conv2d(256, 512, 3, 1, 1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2), (2, 1), (0, 1), ceil_mode=False),
-        )
-
-        self.conv6 = nn.Conv2d(512, num_classes, 1, 1)
-        self.export = export
-
-        # self.Linear1=nn.Linear(192*7*7,num_classes)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        # x=self.maxPool1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
-        x = self.conv5(x)
-        x = self.conv6(x)
-        if self.export:
-            conv = x.squeeze(2)  # b *512 * width
-            conv = conv.transpose(2, 1)  # [w, b, c]
-            conv = conv.argmax(dim=2)
-            return conv
-        else:
-            b, c, h, w = x.size()
-            assert h == 1, "the height of conv must be 1"
+            # x = self.ada_pool(x)
             conv = x.squeeze(2)  # b *512 * width
             conv = conv.permute(2, 0, 1)  # [w, b, c]
             # output = F.log_softmax(self.rnn(conv), dim=2)
@@ -277,8 +97,9 @@ class caffeNetOcr(nn.Module):
 if __name__ == '__main__':
     #  model = CRNN(32, 3, 79,10)
     # 输入长度为[48, 168]
-    cfg = [32, 'M', 64, 'M', 128, 'M', 256]
-    model = myNet(num_classes=78, export=True, cfg=cfg,in_channel=1)
+    # cfg = [32, 'M', 64, 'M', 128, 'M', 256]
+    # 导出模式
+    model = resnet_ocr(num_classes=78, export=True,in_channel=1)
     input =torch.FloatTensor(1, 1, 48, 168)
     #  torch.save(model.state_dict,"test.pth")
     out = model(input)
